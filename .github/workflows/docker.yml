@@ -1,11 +1,47 @@
-name: Docker Image CI
+# name: Docker Pipeline
+
+# on:
+#   push:
+#     branches: [ main ]  
+
+# jobs:
+#   build:
+#     runs-on: ubuntu-latest
+
+#     steps:
+#     - name: Checkout
+#       uses: actions/checkout@v2
+
+#     - name: Configure AWS Credentials
+#       uses: aws-actions/configure-aws-credentials@v1
+#       with:
+#         aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+#         aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+#         aws-region: ap-south-1
+
+#     - name: Login to Amazon ECR
+#       id: login-ecr
+#       uses: aws-actions/amazon-ecr-login@v1
+
+#     - name: Build, tag, and push image to Amazon ECR
+#       env:
+#         ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
+#         ECR_REPOSITORY: ecr-python-image
+#         IMAGE_TAG: ${{ github.sha }}
+#       run: |
+#         docker build -t $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG .
+#         docker push $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG
+
+
+# Docker Pipeline for Kuldip
+name: Docker Pipeline
 
 on:
   push:
     branches: [ main ]  
 
 jobs:
-  build:
+  build-and-deploy:
     runs-on: ubuntu-latest
 
     steps:
@@ -29,5 +65,26 @@ jobs:
         ECR_REPOSITORY: ecr-python-image
         IMAGE_TAG: ${{ github.sha }}
       run: |
+        # Build the image
         docker build -t $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG .
+        # Tag with 'latest' as well
+        docker tag $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG $ECR_REGISTRY/$ECR_REPOSITORY:latest
+        # Push both tags
         docker push $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG
+        docker push $ECR_REGISTRY/$ECR_REPOSITORY:latest
+
+    - name: Deploy to EC2 instance
+      uses: appleboy/ssh-action@master
+      with:
+        host: ${{ secrets.EC2_HOST }}
+        username: ec2-user
+        key: ${{ secrets.EC2_SSH_KEY }}
+        script: |
+          CONTAINER_NAME=ecr-python-image
+          IMAGE=${{ steps.login-ecr.outputs.registry }}/ecr-python-image:${{ github.sha }}
+          aws ecr get-login-password --region ap-south-1 | docker login --username AWS --password-stdin ${{ steps.login-ecr.outputs.registry }}
+          docker stop $CONTAINER_NAME || true
+          docker rm $CONTAINER_NAME || true
+          docker rmi $IMAGE || true
+          docker pull $IMAGE
+          docker run -d --name $CONTAINER_NAME $IMAGE
