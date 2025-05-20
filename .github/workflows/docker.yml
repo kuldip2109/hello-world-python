@@ -88,3 +88,5 @@ jobs:
           docker rmi $IMAGE || true
           docker pull $IMAGE
           docker run -d --name $CONTAINER_NAME $IMAGE
+
+  
