@@ -75,7 +75,17 @@
               # Log in to Amazon ECR
               aws ecr get-login-password --region ap-south-1 | docker login --username AWS --password-stdin ${{ steps.login-ecr.outputs.registry }}
 
-           
+              # Create docker-compose.yml dynamically
+              cat <<EOF > docker-compose.yml
+              version: '3.8'
+              services:
+                web:
+                  image: $IMAGE
+                  container_name: ecr-python-image
+                  ports:
+                    - "8000:8000"
+                  restart: always
+              EOF
 
               # Stop and remove old service
               docker compose down || true
