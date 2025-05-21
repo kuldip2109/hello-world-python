@@ -37,7 +37,7 @@
             docker push $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG
             docker push $ECR_REGISTRY/$ECR_REPOSITORY:latest
 
-        # - name: Deploy to EC2 instance
+        # - name: Deploy to EC2 instance Using Docker
         #   uses: appleboy/ssh-action@master
         #   with:
         #     host: ${{ secrets.EC2_HOST }}
@@ -75,17 +75,7 @@
               # Log in to Amazon ECR
               aws ecr get-login-password --region ap-south-1 | docker login --username AWS --password-stdin ${{ steps.login-ecr.outputs.registry }}
 
-              # Create docker-compose.yml dynamically
-              cat <<EOF > docker-compose.yml
-              version: '3.8'
-              services:
-                web:
-                  image: $IMAGE
-                  container_name: ecr-python-image
-                  ports:
-                    - "8000:8000"
-                  restart: always
-              EOF
+           
 
               # Stop and remove old service
               docker compose down || true
