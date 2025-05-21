@@ -37,20 +37,61 @@
             docker push $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG
             docker push $ECR_REGISTRY/$ECR_REPOSITORY:latest
 
-        - name: Deploy to EC2 instance
+        # - name: Deploy to EC2 instance
+        #   uses: appleboy/ssh-action@master
+        #   with:
+        #     host: ${{ secrets.EC2_HOST }}
+        #     username: ubuntu
+        #     key: ${{ secrets.EC2_SSH_KEY }}
+        #     script: |
+        #       CONTAINER_NAME=ecr-python-image
+        #       IMAGE=${{ steps.login-ecr.outputs.registry }}/ecr-python-image:${{ github.sha }}
+        #       aws ecr get-login-password --region ap-south-1 | docker login --username AWS --password-stdin ${{ steps.login-ecr.outputs.registry }}
+        #       docker stop $CONTAINER_NAME || true
+        #       docker rm $CONTAINER_NAME || true
+        #       docker rmi $IMAGE || true
+        #       docker pull $IMAGE
+        #       docker run -d --name $CONTAINER_NAME $IMAGE
+
+        - name: Deploy to EC2 instance using Docker Compose
           uses: appleboy/ssh-action@master
           with:
             host: ${{ secrets.EC2_HOST }}
             username: ubuntu
             key: ${{ secrets.EC2_SSH_KEY }}
             script: |
-              CONTAINER_NAME=ecr-python-image
               IMAGE=${{ steps.login-ecr.outputs.registry }}/ecr-python-image:${{ github.sha }}
-              aws ecr get-login-password --region ap-south-1 | docker login --username AWS --password-stdin ${{ steps.login-ecr.outputs.registry }}
-              docker stop $CONTAINER_NAME || true
-              docker rm $CONTAINER_NAME || true
-              docker rmi $IMAGE || true
-              docker pull $IMAGE
-              docker run -d --name $CONTAINER_NAME $IMAGE
 
-      
+              # Install Docker Compose if not already installed
+              if ! command -v docker compose &> /dev/null
+              then
+                sudo apt-get update
+                sudo apt-get install -y docker.io
+                sudo curl -SL https://github.com/docker/compose/releases/download/v2.24.5/docker-compose-linux-x86_64 -o /usr/local/bin/docker-compose
+                sudo chmod +x /usr/local/bin/docker-compose
+                sudo ln -s /usr/local/bin/docker-compose /usr/bin/docker-compose
+              fi
+
+              # Log in to Amazon ECR
+              aws ecr get-login-password --region ap-south-1 | docker login --username AWS --password-stdin ${{ steps.login-ecr.outputs.registry }}
+
+              # Create docker-compose.yml dynamically
+              cat <<EOF > docker-compose.yml
+              version: '3.8'
+              services:
+                web:
+                  image: $IMAGE
+                  container_name: ecr-python-image
+                  ports:
+                    - "8000:8000"
+                  restart: always
+              EOF
+
+              # Stop and remove old service
+              docker compose down || true
+
+              # Pull new image and start service
+              docker compose pull
+              docker compose up -d
+
+        
